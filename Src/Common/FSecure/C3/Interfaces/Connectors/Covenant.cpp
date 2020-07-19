@@ -244,21 +244,30 @@ FSecure::C3::Interfaces::Connectors::Covenant::Covenant(ByteView arguments)
 		this->m_ListeningPostAddress = url.substr(start, end - start);
 
 		///Create the bridge listener
-		url = this->m_webHost + OBF("/listener/createbridge");
-		web::http::client::http_client webClientBridge(utility::conversions::to_string_t(url), config);
+		web::http::client::http_client_config config;
+		config.set_validate_certificates(false);
+		web::http::client::http_client webClient(utility::conversions::to_string_t(this->m_webHost + OBF("/api/listeners/bridge")), config);
+		web::http::http_request request;
+		
+		json postData;
+		postData[OBF("name")] = "C3Bridge";
+		postData[OBF("guid")] = "b85ea642f2";
+		postData[OBF("description")] = "A Bridge for custom listeners.";
+		postData[OBF("bindAddress")] = "0.0.0.0";
+		postData[OBF("bindPort")] = std::to_string(this->m_ListeningPostPort);
+		postData[OBF("connectAddresses")] = {this->m_ListeningPostAddress};
+		postData[OBF("connectPort")] = this->m_ListeningPostPort;
+		postData[OBF("profileId")] = 3;
+		postData[OBF("listenerTypeId")] = 2;
+		postData[OBF("status")] = "Active";
+		
 		request = web::http::http_request(web::http::methods::POST);
-		request.headers().set_content_type(utility::conversions::to_string_t(OBF("application/x-www-form-urlencoded")));
-
+		request.headers().set_content_type(utility::conversions::to_string_t(OBF("application/json")));
+		request.set_body(utility::conversions::to_string_t(postData.dump()));
 		std::string authHeader = OBF("Bearer ") + this->m_token;
 		request.headers().add(OBF(L"Authorization"), utility::conversions::to_string_t(authHeader));
-
-		std::string createBridgeString = "Id=0&GUID=b85ea642f2&ListenerTypeId=2&Status=Active&CovenantToken=&Description=A+Bridge+for+custom+listeners.&Name=C3Bridge&BindAddress=0.0.0.0&BindPort=" + \
-			std::to_string(this->m_ListeningPostPort) + "&ConnectPort=" + std::to_string(this->m_ListeningPostPort) + "&ConnectAddresses%5B0%5D=" + \
-			this->m_ListeningPostAddress + "&ProfileId=3";
-		request.set_body(utility::conversions::to_string_t(createBridgeString));
-
-		task = webClientBridge.request(request);
-		resp = task.get();
+		pplx::task<web::http::http_response> task = webClient.request(request);
+		web::http::http_response resp = task.get();
 
 		if (resp.status_code() != web::http::status_codes::OK)
 			throw std::exception((OBF("[Covenant] Error setting up BridgeListener, HTTP resp: ") + std::to_string(resp.status_code())).c_str());
